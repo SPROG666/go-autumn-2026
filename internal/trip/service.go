@@ -19,13 +19,47 @@ type CreateParams struct {
 }
 
 type Service struct {
-	trips   *Repository
-	history *HistoryRepository
-	tx      TxManager
+	trips       *Repository
+	history     *HistoryRepository
+	tx          TxManager
+	idempotency *IdempotencyRepository
 }
 
-func NewService(trips *Repository, history *HistoryRepository, tx TxManager) *Service {
-	return &Service{trips: trips, history: history, tx: tx}
+func NewService(trips *Repository, history *HistoryRepository, tx TxManager, idempotency *IdempotencyRepository) *Service {
+	return &Service{trips: trips, history: history, tx: tx, idempotency: idempotency}
+}
+
+func (s *Service) CreateWithKey(ctx context.Context, params CreateParams, key *uuid.UUID) (Trip, bool, error) {
+	if key == nil {
+		value, err := s.Create(ctx, params)
+		return value, false, err
+	}
+	if err := s.idempotency.CleanupExpired(ctx); err != nil {
+		return Trip{}, false, err
+	}
+	var value Trip
+	var replay bool
+	err := s.tx.Do(ctx, func(txCtx context.Context) error {
+		var err error
+		var tripID uuid.UUID
+		tripID, replay, err = s.idempotency.Reserve(txCtx, *key, params)
+		if err != nil {
+			return err
+		}
+		if replay {
+			value, err = s.trips.Get(txCtx, tripID)
+			return err
+		}
+		value, err = s.Create(txCtx, params)
+		if err != nil {
+			return err
+		}
+		return s.idempotency.Save(txCtx, *key, value.ID)
+	})
+	if err != nil {
+		return Trip{}, false, fmt.Errorf("create trip with idempotency key: %w", err)
+	}
+	return value, replay, nil
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (Trip, error) {

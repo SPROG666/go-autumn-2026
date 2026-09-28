@@ -24,7 +24,7 @@ type tripHandler struct {
 
 var _ api.ServerInterface = (*tripHandler)(nil)
 
-func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, _ api.CreateTripParams) {
+func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {
 	var body api.CreateTripJSONRequestBody
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -42,12 +42,16 @@ func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, _ api.C
 		return
 	}
 
-	value, err := h.service.Create(r.Context(), trip.CreateParams{
+	value, replay, err := h.service.CreateWithKey(r.Context(), trip.CreateParams{
 		UserID: body.UserId, DriverID: body.DriverId,
 		StartLatitude: body.StartPoint.Latitude, StartLongitude: body.StartPoint.Longitude,
 		EndLatitude: body.EndPoint.Latitude, EndLongitude: body.EndPoint.Longitude,
 		Price: body.Price,
-	})
+	}, params.IdempotencyKey)
+	if errors.Is(err, trip.ErrIdempotencyConflict) {
+		h.problem(w, r, http.StatusConflict, "idempotency_conflict", "idempotency-conflict", "Idempotency conflict", "Idempotency key was already used with a different request")
+		return
+	}
 	if errors.Is(err, trip.ErrDriverBusy) {
 		h.problem(w, r, http.StatusConflict, "driver_busy", "driver-busy", "Driver busy", "Driver already has an active trip")
 		return
@@ -59,7 +63,11 @@ func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, _ api.C
 	}
 
 	w.Header().Set("Location", "/api/v1/trips/"+value.ID.String())
-	h.writeTrip(w, r, http.StatusCreated, value)
+	status := http.StatusCreated
+	if replay {
+		status = http.StatusOK
+	}
+	h.writeTrip(w, r, status, value)
 }
 
 func (h *tripHandler) GetTrip(w http.ResponseWriter, r *http.Request, tripID api.TripId) {

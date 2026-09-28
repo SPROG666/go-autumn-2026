@@ -29,6 +29,7 @@ def main() -> None:
         "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT", "DATABASE_URL",
         "DATABASE_MAX_CONNS", "DATABASE_MIN_CONNS", "DATABASE_MAX_CONN_LIFETIME",
         "DATABASE_CONNECT_TIMEOUT", "DATABASE_QUERY_TIMEOUT",
+        "IDEMPOTENCY_TTL",
     )
     if any(not os.environ.get(key) for key in required):
         parser.error("load .env.example and .env into the environment first")

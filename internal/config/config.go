@@ -24,6 +24,7 @@ type Config struct {
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
+	IdempotencyTTL          time.Duration
 }
 
 func Load() (Config, error) {
@@ -71,6 +72,7 @@ func Load() (Config, error) {
 		{"DATABASE_MAX_CONN_LIFETIME", &cfg.DatabaseMaxConnLifetime},
 		{"DATABASE_CONNECT_TIMEOUT", &cfg.DatabaseConnectTimeout},
 		{"DATABASE_QUERY_TIMEOUT", &cfg.DatabaseQueryTimeout},
+		{"IDEMPOTENCY_TTL", &cfg.IdempotencyTTL},
 	} {
 		value, err := required(setting.name)
 		if err != nil {
