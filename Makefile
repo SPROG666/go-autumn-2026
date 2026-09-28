@@ -1,4 +1,10 @@
-.PHONY: generate run build test vet migrate migrate-down migrate-status check-database-url
+.PHONY: generate run build test vet migrate migrate-down migrate-status check-database-url docker-build docker-run
+
+docker-build:
+	docker build -t trip-service:lab01 .
+
+docker-run:
+	python3 deploy/run-container.py
 
 build:
 	mkdir -p bin
