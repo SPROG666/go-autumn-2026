@@ -1,3 +1,7 @@
+include .env.example
+-include .env
+export
+
 .PHONY: generate run build test vet migrate migrate-down migrate-status check-database-url docker-build docker-run
 
 docker-build:
@@ -24,7 +28,7 @@ generate:
 	go tool oapi-codegen -config oapi-codegen.yaml contracts/openapi/trip-service.openapi.yaml
 
 check-database-url:
-	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is required; load .env first" >&2; exit 1; }
+	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is required; set it in .env or pass it to make" >&2; exit 1; }
 
 migrate: check-database-url
 	@GOOSE_DRIVER=postgres GOOSE_DBSTRING="$$DATABASE_URL" go tool goose -dir migrations up
