@@ -11,13 +11,11 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/SPROG666/go-autumn-2026/api"
-	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
-func NewRouter(logger *slog.Logger, pool *pgxpool.Pool, queryTimeout time.Duration, service *trip.Service) (http.Handler, error) {
+func NewRouter(logger *slog.Logger, pool databasePinger, queryTimeout time.Duration, service tripService) (http.Handler, error) {
 	spec, err := api.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load embedded OpenAPI: %w", err)
