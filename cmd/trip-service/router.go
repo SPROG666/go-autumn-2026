@@ -1,4 +1,4 @@
-package httpapi
+package main
 
 import (
 	"fmt"
@@ -6,24 +6,23 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/SPROG666/go-autumn-2026/api"
+	"github.com/SPROG666/go-autumn-2026/internal/httpapi"
 )
 
-func NewRouter(logger *slog.Logger, pool databasePinger, queryTimeout time.Duration, service tripService) (http.Handler, error) {
+func newRouter(logger *slog.Logger, handler *httpapi.Handler) (http.Handler, error) {
 	spec, err := api.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load embedded OpenAPI: %w", err)
 	}
-	handler := &tripHandler{service: service, logger: logger, pool: pool, queryTimeout: queryTimeout}
 	router := chi.NewRouter()
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		handler.problem(w, r, http.StatusNotFound, "route_not_found", "route-not-found", "Route not found", "Requested route was not found")
+		handler.Problem(w, r, http.StatusNotFound, "route_not_found", "route-not-found", "Route not found", "Requested route was not found")
 	})
 	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.RawPath
@@ -41,7 +40,7 @@ func NewRouter(logger *slog.Logger, pool databasePinger, queryTimeout time.Durat
 			}
 		}
 		w.Header().Set("Allow", strings.Join(allowed, ", "))
-		handler.problem(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method-not-allowed", "Method not allowed", "HTTP method is not allowed for this route")
+		handler.Problem(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method-not-allowed", "Method not allowed", "HTTP method is not allowed for this route")
 	})
 	validate := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,14 +52,14 @@ func NewRouter(logger *slog.Logger, pool databasePinger, queryTimeout time.Durat
 			path := spec.Paths.Value(pattern)
 			if path == nil || path.Operations()[r.Method] == nil {
 				logger.ErrorContext(r.Context(), "route missing from embedded OpenAPI", "path", pattern)
-				handler.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+				handler.Problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
 				return
 			}
 			operation := path.Operations()[r.Method]
 			if operation.RequestBody == nil && r.Body != nil {
 				var firstByte [1]byte
 				if _, err := io.ReadFull(r.Body, firstByte[:]); err != io.EOF {
-					handler.invalidRequest(w, r)
+					handler.InvalidRequest(w, r)
 					return
 				}
 			}
@@ -73,7 +72,7 @@ func NewRouter(logger *slog.Logger, pool databasePinger, queryTimeout time.Durat
 				},
 			}
 			if err := openapi3filter.ValidateRequest(r.Context(), input); err != nil {
-				handler.invalidRequest(w, r)
+				handler.InvalidRequest(w, r)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -83,7 +82,7 @@ func NewRouter(logger *slog.Logger, pool databasePinger, queryTimeout time.Durat
 		BaseRouter:  router,
 		Middlewares: []api.MiddlewareFunc{validate},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
-			handler.invalidRequest(w, r)
+			handler.InvalidRequest(w, r)
 		},
 	}), nil
 }

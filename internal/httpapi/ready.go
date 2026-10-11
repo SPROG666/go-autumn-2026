@@ -7,7 +7,7 @@ import (
 	"github.com/SPROG666/go-autumn-2026/api"
 )
 
-func (h *tripHandler) Ready(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
 	defer cancel()
 	if err := h.pool.Ping(ctx); err != nil {

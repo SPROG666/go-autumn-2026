@@ -70,7 +70,8 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 	tx := storage.NewTransactionManager(pool, cfg.DatabaseQueryTimeout)
 	idempotency := repository.NewIdempotencyRepository(pool, cfg.DatabaseQueryTimeout, cfg.IdempotencyTTL)
 	tripService := service.NewService(trips, history, tx, idempotency)
-	router, err := httpapi.NewRouter(logger, pool, cfg.DatabaseQueryTimeout, tripService)
+	handler := httpapi.NewHandler(logger, pool, cfg.DatabaseQueryTimeout, tripService)
+	router, err := newRouter(logger, handler)
 	if err != nil {
 		return err
 	}

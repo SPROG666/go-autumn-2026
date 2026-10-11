@@ -19,4 +19,4 @@ type databasePinger interface {
 	Ping(ctx context.Context) error
 }
 
-var _ api.ServerInterface = (*tripHandler)(nil)
+var _ api.ServerInterface = (*Handler)(nil)

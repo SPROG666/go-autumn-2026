@@ -8,7 +8,7 @@ import (
 	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
-func (h *tripHandler) writeTrip(w http.ResponseWriter, r *http.Request, status int, value trip.Trip) {
+func (h *Handler) writeTrip(w http.ResponseWriter, r *http.Request, status int, value trip.Trip) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(api.Trip{
@@ -22,11 +22,11 @@ func (h *tripHandler) writeTrip(w http.ResponseWriter, r *http.Request, status i
 	}
 }
 
-func (h *tripHandler) invalidRequest(w http.ResponseWriter, r *http.Request) {
-	h.problem(w, r, http.StatusBadRequest, "invalid_request", "invalid-request", "Invalid request", "Request validation failed")
+func (h *Handler) InvalidRequest(w http.ResponseWriter, r *http.Request) {
+	h.Problem(w, r, http.StatusBadRequest, "invalid_request", "invalid-request", "Invalid request", "Request validation failed")
 }
 
-func (h *tripHandler) problem(w http.ResponseWriter, r *http.Request, status int, code, kind, title, detail string) {
+func (h *Handler) Problem(w http.ResponseWriter, r *http.Request, status int, code, kind, title, detail string) {
 	instance := r.URL.Path
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
@@ -39,7 +39,7 @@ func (h *tripHandler) problem(w http.ResponseWriter, r *http.Request, status int
 	}
 }
 
-func (h *tripHandler) writeHealth(w http.ResponseWriter, r *http.Request, code int, status api.HealthResponseStatus) {
+func (h *Handler) writeHealth(w http.ResponseWriter, r *http.Request, code int, status api.HealthResponseStatus) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(api.HealthResponse{Status: status}); err != nil {

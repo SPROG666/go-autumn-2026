@@ -12,21 +12,21 @@ import (
 	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
-func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {
+func (h *Handler) CreateTrip(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {
 	var body api.CreateTripJSONRequestBody
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil {
-		h.invalidRequest(w, r)
+		h.InvalidRequest(w, r)
 		return
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		h.invalidRequest(w, r)
+		h.InvalidRequest(w, r)
 		return
 	}
 	if body.UserId == uuid.Nil || body.DriverId == uuid.Nil {
-		h.invalidRequest(w, r)
+		h.InvalidRequest(w, r)
 		return
 	}
 
@@ -39,12 +39,12 @@ func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, params 
 	if err != nil {
 		switch {
 		case errors.Is(err, trip.ErrIdempotencyConflict):
-			h.problem(w, r, http.StatusConflict, "idempotency_conflict", "idempotency-conflict", "Idempotency conflict", "Idempotency key was already used with a different request")
+			h.Problem(w, r, http.StatusConflict, "idempotency_conflict", "idempotency-conflict", "Idempotency conflict", "Idempotency key was already used with a different request")
 		case errors.Is(err, trip.ErrDriverBusy):
-			h.problem(w, r, http.StatusConflict, "driver_busy", "driver-busy", "Driver busy", "Driver already has an active trip")
+			h.Problem(w, r, http.StatusConflict, "driver_busy", "driver-busy", "Driver busy", "Driver already has an active trip")
 		default:
 			h.logger.ErrorContext(r.Context(), "create trip failed", "error", err)
-			h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+			h.Problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
 		}
 		return
 	}
