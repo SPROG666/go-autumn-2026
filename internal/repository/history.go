@@ -1,4 +1,4 @@
-package trip
+package repository
 
 import (
 	"context"

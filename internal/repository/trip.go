@@ -1,4 +1,4 @@
-package trip
+package repository
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/SPROG666/go-autumn-2026/internal/storage"
+	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
 type Repository struct {
@@ -24,7 +25,7 @@ func NewRepository(pool *pgxpool.Pool, queryTimeout time.Duration) *Repository {
 	return &Repository{pool: pool, queryTimeout: queryTimeout}
 }
 
-func (r *Repository) Create(ctx context.Context, value Trip) (Trip, error) {
+func (r *Repository) Create(ctx context.Context, value trip.Trip) (trip.Trip, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
 
@@ -44,7 +45,7 @@ func (r *Repository) Create(ctx context.Context, value Trip) (Trip, error) {
 		Suffix("RETURNING created_at, updated_at").
 		ToSql()
 	if err != nil {
-		return Trip{}, fmt.Errorf("build create trip query: %w", err)
+		return trip.Trip{}, fmt.Errorf("build create trip query: %w", err)
 	}
 
 	err = storage.Executor(ctx, r.pool).QueryRow(ctx, query, args...).Scan(&value.CreatedAt, &value.UpdatedAt)
@@ -52,26 +53,26 @@ func (r *Repository) Create(ctx context.Context, value Trip) (Trip, error) {
 		var pgErr *pgconn.PgError
 		switch {
 		case errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "trips_active_driver_uidx":
-			return Trip{}, fmt.Errorf("create trip: %w", ErrDriverBusy)
+			return trip.Trip{}, fmt.Errorf("create trip: %w", trip.ErrDriverBusy)
 		default:
-			return Trip{}, fmt.Errorf("create trip: %w", err)
+			return trip.Trip{}, fmt.Errorf("create trip: %w", err)
 		}
 	}
 	return value, nil
 }
 
-func (r *Repository) Get(ctx context.Context, id uuid.UUID) (Trip, error) {
+func (r *Repository) Get(ctx context.Context, id uuid.UUID) (trip.Trip, error) {
 	return r.get(ctx, id, false)
 }
 
-func (r *Repository) GetForUpdate(ctx context.Context, id uuid.UUID) (Trip, error) {
+func (r *Repository) GetForUpdate(ctx context.Context, id uuid.UUID) (trip.Trip, error) {
 	if _, ok := storage.Executor(ctx, r.pool).(pgx.Tx); !ok {
-		return Trip{}, fmt.Errorf("get trip for update requires a transaction")
+		return trip.Trip{}, fmt.Errorf("get trip for update requires a transaction")
 	}
 	return r.get(ctx, id, true)
 }
 
-func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (Trip, error) {
+func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (trip.Trip, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
 
@@ -89,10 +90,10 @@ func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (Trip, er
 	}
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return Trip{}, fmt.Errorf("build get trip query: %w", err)
+		return trip.Trip{}, fmt.Errorf("build get trip query: %w", err)
 	}
 
-	var result Trip
+	var result trip.Trip
 	err = storage.Executor(ctx, r.pool).QueryRow(ctx, query, args...).Scan(
 		&result.ID, &result.UserID, &result.DriverID,
 		&result.StartLatitude, &result.StartLongitude, &result.EndLatitude, &result.EndLongitude,
@@ -102,9 +103,9 @@ func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (Trip, er
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return Trip{}, fmt.Errorf("get trip %s: %w", id, ErrNotFound)
+			return trip.Trip{}, fmt.Errorf("get trip %s: %w", id, trip.ErrNotFound)
 		default:
-			return Trip{}, fmt.Errorf("get trip %s: %w", id, err)
+			return trip.Trip{}, fmt.Errorf("get trip %s: %w", id, err)
 		}
 	}
 	result.StartedAt = result.StartedAt.UTC()

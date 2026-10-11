@@ -1,4 +1,4 @@
-package trip
+package repository
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/SPROG666/go-autumn-2026/internal/storage"
+	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
 type IdempotencyRepository struct {
@@ -39,7 +40,7 @@ func (r *IdempotencyRepository) CleanupExpired(ctx context.Context) error {
 	return nil
 }
 
-func (r *IdempotencyRepository) Reserve(ctx context.Context, key uuid.UUID, params CreateParams) (uuid.UUID, bool, error) {
+func (r *IdempotencyRepository) Reserve(ctx context.Context, key uuid.UUID, params trip.CreateParams) (uuid.UUID, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
 	executor := storage.Executor(ctx, r.pool)
@@ -76,7 +77,7 @@ func (r *IdempotencyRepository) Reserve(ctx context.Context, key uuid.UUID, para
 		return uuid.Nil, false, nil
 	}
 	if !matches {
-		return uuid.Nil, false, ErrIdempotencyConflict
+		return uuid.Nil, false, trip.ErrIdempotencyConflict
 	}
 	if tripID == nil {
 		return uuid.Nil, false, nil

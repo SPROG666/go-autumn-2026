@@ -14,8 +14,9 @@ import (
 
 	"github.com/SPROG666/go-autumn-2026/internal/config"
 	"github.com/SPROG666/go-autumn-2026/internal/httpapi"
+	"github.com/SPROG666/go-autumn-2026/internal/repository"
+	"github.com/SPROG666/go-autumn-2026/internal/service"
 	"github.com/SPROG666/go-autumn-2026/internal/storage"
-	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
 func main() {
@@ -64,12 +65,12 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 		}
 	}()
 	logger.Info("PostgreSQL connection established")
-	trips := trip.NewRepository(pool, cfg.DatabaseQueryTimeout)
-	history := trip.NewHistoryRepository(pool, cfg.DatabaseQueryTimeout)
+	trips := repository.NewRepository(pool, cfg.DatabaseQueryTimeout)
+	history := repository.NewHistoryRepository(pool, cfg.DatabaseQueryTimeout)
 	tx := storage.NewTransactionManager(pool, cfg.DatabaseQueryTimeout)
-	idempotency := trip.NewIdempotencyRepository(pool, cfg.DatabaseQueryTimeout, cfg.IdempotencyTTL)
-	service := trip.NewService(trips, history, tx, idempotency)
-	router, err := httpapi.NewRouter(logger, pool, cfg.DatabaseQueryTimeout, service)
+	idempotency := repository.NewIdempotencyRepository(pool, cfg.DatabaseQueryTimeout, cfg.IdempotencyTTL)
+	tripService := service.NewService(trips, history, tx, idempotency)
+	router, err := httpapi.NewRouter(logger, pool, cfg.DatabaseQueryTimeout, tripService)
 	if err != nil {
 		return err
 	}

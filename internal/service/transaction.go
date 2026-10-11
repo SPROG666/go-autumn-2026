@@ -1,4 +1,4 @@
-package trip
+package service
 
 import "context"
 

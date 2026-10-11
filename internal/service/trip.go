@@ -1,4 +1,4 @@
-package trip
+package service
 
 import (
 	"context"
@@ -6,38 +6,31 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/SPROG666/go-autumn-2026/internal/repository"
+	"github.com/SPROG666/go-autumn-2026/internal/trip"
 )
 
-type CreateParams struct {
-	UserID         uuid.UUID
-	DriverID       uuid.UUID
-	StartLatitude  float64
-	StartLongitude float64
-	EndLatitude    float64
-	EndLongitude   float64
-	Price          int64
-}
-
 type Service struct {
-	trips       *Repository
-	history     *HistoryRepository
+	trips       *repository.Repository
+	history     *repository.HistoryRepository
 	tx          TxManager
-	idempotency *IdempotencyRepository
+	idempotency *repository.IdempotencyRepository
 }
 
-func NewService(trips *Repository, history *HistoryRepository, tx TxManager, idempotency *IdempotencyRepository) *Service {
+func NewService(trips *repository.Repository, history *repository.HistoryRepository, tx TxManager, idempotency *repository.IdempotencyRepository) *Service {
 	return &Service{trips: trips, history: history, tx: tx, idempotency: idempotency}
 }
 
-func (s *Service) CreateWithKey(ctx context.Context, params CreateParams, key *uuid.UUID) (Trip, bool, error) {
+func (s *Service) CreateWithKey(ctx context.Context, params trip.CreateParams, key *uuid.UUID) (trip.Trip, bool, error) {
 	if key == nil {
 		value, err := s.Create(ctx, params)
 		return value, false, err
 	}
 	if err := s.idempotency.CleanupExpired(ctx); err != nil {
-		return Trip{}, false, err
+		return trip.Trip{}, false, err
 	}
-	var value Trip
+	var value trip.Trip
 	var replay bool
 	err := s.tx.Do(ctx, func(txCtx context.Context) error {
 		var err error
@@ -57,17 +50,17 @@ func (s *Service) CreateWithKey(ctx context.Context, params CreateParams, key *u
 		return s.idempotency.Save(txCtx, *key, value.ID)
 	})
 	if err != nil {
-		return Trip{}, false, fmt.Errorf("create trip with idempotency key: %w", err)
+		return trip.Trip{}, false, fmt.Errorf("create trip with idempotency key: %w", err)
 	}
 	return value, replay, nil
 }
 
-func (s *Service) Get(ctx context.Context, id uuid.UUID) (Trip, error) {
+func (s *Service) Get(ctx context.Context, id uuid.UUID) (trip.Trip, error) {
 	return s.trips.Get(ctx, id)
 }
 
-func (s *Service) Finish(ctx context.Context, id uuid.UUID) (Trip, error) {
-	var value Trip
+func (s *Service) Finish(ctx context.Context, id uuid.UUID) (trip.Trip, error) {
+	var value trip.Trip
 	err := s.tx.Do(ctx, func(txCtx context.Context) error {
 		var err error
 		value, err = s.trips.GetForUpdate(txCtx, id)
@@ -75,7 +68,7 @@ func (s *Service) Finish(ctx context.Context, id uuid.UUID) (Trip, error) {
 			return err
 		}
 		if value.Status == "completed" {
-			return ErrCompleted
+			return trip.ErrCompleted
 		}
 		finishedAt := time.Now().UTC().Truncate(time.Microsecond)
 		if err := s.trips.Complete(txCtx, id, finishedAt); err != nil {
@@ -91,17 +84,17 @@ func (s *Service) Finish(ctx context.Context, id uuid.UUID) (Trip, error) {
 		return nil
 	})
 	if err != nil {
-		return Trip{}, fmt.Errorf("finish trip with history: %w", err)
+		return trip.Trip{}, fmt.Errorf("finish trip with history: %w", err)
 	}
 	return value, nil
 }
 
-func (s *Service) Create(ctx context.Context, params CreateParams) (Trip, error) {
+func (s *Service) Create(ctx context.Context, params trip.CreateParams) (trip.Trip, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
-		return Trip{}, fmt.Errorf("generate trip ID: %w", err)
+		return trip.Trip{}, fmt.Errorf("generate trip ID: %w", err)
 	}
-	value := Trip{
+	value := trip.Trip{
 		ID:             id,
 		UserID:         params.UserID,
 		DriverID:       params.DriverID,
@@ -123,7 +116,7 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (Trip, error)
 		return s.history.Add(txCtx, value.ID, nil, value.Status, value.StartedAt)
 	})
 	if err != nil {
-		return Trip{}, fmt.Errorf("create trip with history: %w", err)
+		return trip.Trip{}, fmt.Errorf("create trip with history: %w", err)
 	}
 	return value, nil
 }
