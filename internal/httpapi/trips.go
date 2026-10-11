@@ -48,17 +48,16 @@ func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, params 
 		EndLatitude: body.EndPoint.Latitude, EndLongitude: body.EndPoint.Longitude,
 		Price: body.Price,
 	}, params.IdempotencyKey)
-	if errors.Is(err, trip.ErrIdempotencyConflict) {
-		h.problem(w, r, http.StatusConflict, "idempotency_conflict", "idempotency-conflict", "Idempotency conflict", "Idempotency key was already used with a different request")
-		return
-	}
-	if errors.Is(err, trip.ErrDriverBusy) {
-		h.problem(w, r, http.StatusConflict, "driver_busy", "driver-busy", "Driver busy", "Driver already has an active trip")
-		return
-	}
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "create trip failed", "error", err)
-		h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+		switch {
+		case errors.Is(err, trip.ErrIdempotencyConflict):
+			h.problem(w, r, http.StatusConflict, "idempotency_conflict", "idempotency-conflict", "Idempotency conflict", "Idempotency key was already used with a different request")
+		case errors.Is(err, trip.ErrDriverBusy):
+			h.problem(w, r, http.StatusConflict, "driver_busy", "driver-busy", "Driver busy", "Driver already has an active trip")
+		default:
+			h.logger.ErrorContext(r.Context(), "create trip failed", "error", err)
+			h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+		}
 		return
 	}
 
@@ -72,13 +71,14 @@ func (h *tripHandler) CreateTrip(w http.ResponseWriter, r *http.Request, params 
 
 func (h *tripHandler) GetTrip(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
 	value, err := h.service.Get(r.Context(), tripID)
-	if errors.Is(err, trip.ErrNotFound) {
-		h.problem(w, r, http.StatusNotFound, "trip_not_found", "trip-not-found", "Trip not found", "Trip was not found")
-		return
-	}
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "get trip failed", "error", err)
-		h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+		switch {
+		case errors.Is(err, trip.ErrNotFound):
+			h.problem(w, r, http.StatusNotFound, "trip_not_found", "trip-not-found", "Trip not found", "Trip was not found")
+		default:
+			h.logger.ErrorContext(r.Context(), "get trip failed", "error", err)
+			h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+		}
 		return
 	}
 	h.writeTrip(w, r, http.StatusOK, value)
@@ -86,17 +86,16 @@ func (h *tripHandler) GetTrip(w http.ResponseWriter, r *http.Request, tripID api
 
 func (h *tripHandler) FinishTrip(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
 	value, err := h.service.Finish(r.Context(), tripID)
-	if errors.Is(err, trip.ErrNotFound) {
-		h.problem(w, r, http.StatusNotFound, "trip_not_found", "trip-not-found", "Trip not found", "Trip was not found")
-		return
-	}
-	if errors.Is(err, trip.ErrCompleted) {
-		h.problem(w, r, http.StatusConflict, "trip_completed", "trip-completed", "Trip completed", "Operation is not allowed for a completed trip")
-		return
-	}
 	if err != nil {
-		h.logger.ErrorContext(r.Context(), "finish trip failed", "error", err)
-		h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+		switch {
+		case errors.Is(err, trip.ErrNotFound):
+			h.problem(w, r, http.StatusNotFound, "trip_not_found", "trip-not-found", "Trip not found", "Trip was not found")
+		case errors.Is(err, trip.ErrCompleted):
+			h.problem(w, r, http.StatusConflict, "trip_completed", "trip-completed", "Trip completed", "Operation is not allowed for a completed trip")
+		default:
+			h.logger.ErrorContext(r.Context(), "finish trip failed", "error", err)
+			h.problem(w, r, http.StatusInternalServerError, "internal_error", "internal-error", "Internal Server Error", "Internal server error")
+		}
 		return
 	}
 	h.writeTrip(w, r, http.StatusOK, value)

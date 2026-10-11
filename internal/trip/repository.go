@@ -50,10 +50,12 @@ func (r *Repository) Create(ctx context.Context, value Trip) (Trip, error) {
 	err = storage.Executor(ctx, r.pool).QueryRow(ctx, query, args...).Scan(&value.CreatedAt, &value.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "trips_active_driver_uidx" {
+		switch {
+		case errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "trips_active_driver_uidx":
 			return Trip{}, fmt.Errorf("create trip: %w", ErrDriverBusy)
+		default:
+			return Trip{}, fmt.Errorf("create trip: %w", err)
 		}
-		return Trip{}, fmt.Errorf("create trip: %w", err)
 	}
 	return value, nil
 }
@@ -97,11 +99,13 @@ func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (Trip, er
 		&result.Price, &result.Status, &result.StartedAt, &result.FinishedAt,
 		&result.CreatedAt, &result.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Trip{}, fmt.Errorf("get trip %s: %w", id, ErrNotFound)
-	}
 	if err != nil {
-		return Trip{}, fmt.Errorf("get trip %s: %w", id, err)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return Trip{}, fmt.Errorf("get trip %s: %w", id, ErrNotFound)
+		default:
+			return Trip{}, fmt.Errorf("get trip %s: %w", id, err)
+		}
 	}
 	result.StartedAt = result.StartedAt.UTC()
 	result.CreatedAt = result.CreatedAt.UTC()

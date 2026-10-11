@@ -97,10 +97,12 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) (runErr er
 
 	select {
 	case err := <-serveErrors:
-		if errors.Is(err, http.ErrServerClosed) {
+		switch {
+		case errors.Is(err, http.ErrServerClosed):
 			return nil
+		default:
+			return fmt.Errorf("serve HTTP: %w", err)
 		}
-		return fmt.Errorf("serve HTTP: %w", err)
 	case <-ctx.Done():
 		shutdownDeadline = time.Now().Add(cfg.ShutdownTimeout)
 		logger.Info("shutting down HTTP server")
