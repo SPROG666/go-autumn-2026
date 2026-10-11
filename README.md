@@ -178,6 +178,9 @@ docker image inspect trip-service:lab01 --format '{{.Size}} bytes'
 Все переменные обязательны. Примеры находятся в [.env.example](.env.example),
 реальный `DATABASE_URL` берётся из `.env`, созданного `tripgoctl`.
 
+Конфиг читает `cleanenv`, ограничения проверяет `validator` по тегам структуры
+`Config`.
+
 | Переменная | Пример | Назначение |
 |---|---|---|
 | HTTP_ADDR | :8080 | Адрес сервера |

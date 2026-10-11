@@ -4,124 +4,59 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
+	"reflect"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/go-playground/validator/v10/non-standard/validators"
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
 type Config struct {
-	HTTPAddr                string
-	HTTPReadTimeout         time.Duration
-	HTTPReadHeaderTimeout   time.Duration
-	HTTPWriteTimeout        time.Duration
-	HTTPIdleTimeout         time.Duration
-	LogLevel                slog.Level
-	ShutdownTimeout         time.Duration
-	DatabaseURL             string
-	DatabaseMaxConns        int32
-	DatabaseMinConns        int32
-	DatabaseMaxConnLifetime time.Duration
-	DatabaseConnectTimeout  time.Duration
-	DatabaseQueryTimeout    time.Duration
-	IdempotencyTTL          time.Duration
+	HTTPAddr                string        `env:"HTTP_ADDR" env-required:"true" validate:"notblank,listen_addr"`
+	HTTPReadTimeout         time.Duration `env:"HTTP_READ_TIMEOUT" env-required:"true" validate:"gt=0"`
+	HTTPReadHeaderTimeout   time.Duration `env:"HTTP_READ_HEADER_TIMEOUT" env-required:"true" validate:"gt=0"`
+	HTTPWriteTimeout        time.Duration `env:"HTTP_WRITE_TIMEOUT" env-required:"true" validate:"gt=0"`
+	HTTPIdleTimeout         time.Duration `env:"HTTP_IDLE_TIMEOUT" env-required:"true" validate:"gt=0"`
+	LogLevel                slog.Level    `env:"LOG_LEVEL" env-required:"true"`
+	ShutdownTimeout         time.Duration `env:"SHUTDOWN_TIMEOUT" env-required:"true" validate:"gt=0"`
+	DatabaseURL             string        `env:"DATABASE_URL" env-required:"true" validate:"notblank"`
+	DatabaseMaxConns        int32         `env:"DATABASE_MAX_CONNS" env-required:"true" validate:"gte=1"`
+	DatabaseMinConns        int32         `env:"DATABASE_MIN_CONNS" env-required:"true" validate:"gte=0,ltefield=DatabaseMaxConns"`
+	DatabaseMaxConnLifetime time.Duration `env:"DATABASE_MAX_CONN_LIFETIME" env-required:"true" validate:"gt=0"`
+	DatabaseConnectTimeout  time.Duration `env:"DATABASE_CONNECT_TIMEOUT" env-required:"true" validate:"gt=0"`
+	DatabaseQueryTimeout    time.Duration `env:"DATABASE_QUERY_TIMEOUT" env-required:"true" validate:"gt=0"`
+	IdempotencyTTL          time.Duration `env:"IDEMPOTENCY_TTL" env-required:"true" validate:"gt=0"`
 }
 
 func Load() (Config, error) {
 	var cfg Config
-	var err error
-
-	cfg.HTTPAddr, err = required("HTTP_ADDR")
-	if err != nil {
-		return Config{}, err
-	}
-	_, port, err := net.SplitHostPort(cfg.HTTPAddr)
-	if err != nil {
-		return Config{}, fmt.Errorf("HTTP_ADDR: expected host:port or :port: %w", err)
-	}
-	portNumber, err := strconv.Atoi(port)
-	if err != nil {
-		return Config{}, fmt.Errorf("HTTP_ADDR: parse port: %w", err)
-	}
-	if portNumber < 1 || portNumber > 65535 {
-		return Config{}, fmt.Errorf("HTTP_ADDR: port must be between 1 and 65535")
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 
-	cfg.DatabaseURL, err = required("DATABASE_URL")
-	if err != nil {
-		return Config{}, err
+	validate := validator.New()
+	validate.RegisterTagNameFunc(func(field reflect.StructField) string {
+		return field.Tag.Get("env")
+	})
+	if err := validate.RegisterValidation("notblank", validators.NotBlank); err != nil {
+		return Config{}, fmt.Errorf("register config validation: %w", err)
 	}
-
-	level, err := required("LOG_LEVEL")
-	if err != nil {
-		return Config{}, err
+	if err := validate.RegisterValidation("listen_addr", validListenAddr); err != nil {
+		return Config{}, fmt.Errorf("register config validation: %w", err)
 	}
-	if err := cfg.LogLevel.UnmarshalText([]byte(level)); err != nil {
-		return Config{}, fmt.Errorf("LOG_LEVEL: invalid log level: %w", err)
+	if err := validate.Struct(cfg); err != nil {
+		return Config{}, fmt.Errorf("validate config: %w", err)
 	}
-
-	for _, setting := range []struct {
-		name   string
-		target *time.Duration
-	}{
-		{"HTTP_READ_TIMEOUT", &cfg.HTTPReadTimeout},
-		{"HTTP_READ_HEADER_TIMEOUT", &cfg.HTTPReadHeaderTimeout},
-		{"HTTP_WRITE_TIMEOUT", &cfg.HTTPWriteTimeout},
-		{"HTTP_IDLE_TIMEOUT", &cfg.HTTPIdleTimeout},
-		{"SHUTDOWN_TIMEOUT", &cfg.ShutdownTimeout},
-		{"DATABASE_MAX_CONN_LIFETIME", &cfg.DatabaseMaxConnLifetime},
-		{"DATABASE_CONNECT_TIMEOUT", &cfg.DatabaseConnectTimeout},
-		{"DATABASE_QUERY_TIMEOUT", &cfg.DatabaseQueryTimeout},
-		{"IDEMPOTENCY_TTL", &cfg.IdempotencyTTL},
-	} {
-		value, err := required(setting.name)
-		if err != nil {
-			return Config{}, err
-		}
-		duration, err := time.ParseDuration(value)
-		if err != nil {
-			return Config{}, fmt.Errorf("%s: parse duration: %w", setting.name, err)
-		}
-		if duration <= 0 {
-			return Config{}, fmt.Errorf("%s: expected a positive duration, for example 5s", setting.name)
-		}
-		*setting.target = duration
-	}
-
-	cfg.DatabaseMaxConns, err = connections("DATABASE_MAX_CONNS", 1)
-	if err != nil {
-		return Config{}, err
-	}
-	cfg.DatabaseMinConns, err = connections("DATABASE_MIN_CONNS", 0)
-	if err != nil {
-		return Config{}, err
-	}
-	if cfg.DatabaseMinConns > cfg.DatabaseMaxConns {
-		return Config{}, fmt.Errorf("DATABASE_MIN_CONNS must not exceed DATABASE_MAX_CONNS")
-	}
-
 	return cfg, nil
 }
 
-func required(name string) (string, error) {
-	value := os.Getenv(name)
-	if strings.TrimSpace(value) == "" {
-		return "", fmt.Errorf("%s: required environment variable is empty or missing", name)
-	}
-	return value, nil
-}
-
-func connections(name string, minimum int64) (int32, error) {
-	value, err := required(name)
+func validListenAddr(field validator.FieldLevel) bool {
+	_, port, err := net.SplitHostPort(field.Field().String())
 	if err != nil {
-		return 0, err
+		return false
 	}
-	number, err := strconv.ParseInt(value, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("%s: parse connection count: %w", name, err)
-	}
-	if number < minimum {
-		return 0, fmt.Errorf("%s: expected an int32 value >= %d", name, minimum)
-	}
-	return int32(number), nil
+	portNumber, err := strconv.Atoi(port)
+	return err == nil && portNumber >= 1 && portNumber <= 65535
 }
