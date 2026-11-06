@@ -28,6 +28,13 @@ type Config struct {
 	DatabaseConnectTimeout  time.Duration `env:"DATABASE_CONNECT_TIMEOUT" env-required:"true" validate:"gt=0"`
 	DatabaseQueryTimeout    time.Duration `env:"DATABASE_QUERY_TIMEOUT" env-required:"true" validate:"gt=0"`
 	IdempotencyTTL          time.Duration `env:"IDEMPOTENCY_TTL" env-required:"true" validate:"gt=0"`
+	OTelServiceName         string        `env:"OTEL_SERVICE_NAME" env-required:"true" validate:"notblank"`
+	OTelEndpoint            string        `env:"OTEL_EXPORTER_OTLP_ENDPOINT" env-required:"true" validate:"http_url"`
+	OTelProtocol            string        `env:"OTEL_EXPORTER_OTLP_PROTOCOL" env-required:"true" validate:"oneof=grpc http/protobuf"`
+	OTelResourceAttributes  string        `env:"OTEL_RESOURCE_ATTRIBUTES" env-required:"true" validate:"notblank"`
+	OTelSampler             string        `env:"OTEL_TRACES_SAMPLER" env-required:"true" validate:"oneof=always_on always_off parentbased_always_on parentbased_always_off traceidratio parentbased_traceidratio"`
+	OTelSamplerArg          float64       `env:"OTEL_TRACES_SAMPLER_ARG" env-default:"1" validate:"gte=0,lte=1"`
+	ServiceVersion          string        `env:"SERVICE_VERSION" env-default:"dev" validate:"notblank"`
 }
 
 func Load() (Config, error) {
