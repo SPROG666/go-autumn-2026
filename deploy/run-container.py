@@ -17,19 +17,23 @@ class Arguments(argparse.Namespace):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--image", default="trip-service:lab01")
+    parser.add_argument("--image", default="trip-service:lab02")
     parser.add_argument("--node", default="tripgo-local-control-plane")
     parser.add_argument("--network", default="kind")
-    parser.add_argument("--name", default="trip-service-lab01")
+    parser.add_argument("--name", default="trip-service-lab02")
     args = parser.parse_args(namespace=Arguments())
 
     required = (
-        "HTTP_ADDR", "LOG_LEVEL", "SHUTDOWN_TIMEOUT",
-        "HTTP_READ_TIMEOUT", "HTTP_READ_HEADER_TIMEOUT",
-        "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT", "DATABASE_URL",
-        "DATABASE_MAX_CONNS", "DATABASE_MIN_CONNS", "DATABASE_MAX_CONN_LIFETIME",
-        "DATABASE_CONNECT_TIMEOUT", "DATABASE_QUERY_TIMEOUT",
+        "LOG_LEVEL",
+        "SHUTDOWN_TIMEOUT",
+        "HTTP_ADDR", "HTTP_READ_TIMEOUT", "HTTP_READ_HEADER_TIMEOUT",
+        "HTTP_WRITE_TIMEOUT", "HTTP_IDLE_TIMEOUT",
+        "DATABASE_URL", "DATABASE_MAX_CONNS", "DATABASE_MIN_CONNS",
+        "DATABASE_MAX_CONN_LIFETIME", "DATABASE_CONNECT_TIMEOUT", "DATABASE_QUERY_TIMEOUT",
         "IDEMPOTENCY_TTL",
+        "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_RESOURCE_ATTRIBUTES",
+        "OTEL_TRACES_SAMPLER", "OTEL_TRACES_SAMPLER_ARG", "SERVICE_VERSION",
     )
     if any(not os.environ.get(key) for key in required):
         parser.error("load .env.example and .env into the environment first")
@@ -52,20 +56,27 @@ def main() -> None:
     if args.network not in node["NetworkSettings"]["Networks"]:
         parser.error("the selected cluster node is not connected to the selected network")
     ports = cast("dict[str, list[dict[str, str]] | None]", node["NetworkSettings"]["Ports"])
-    matches = [
-        port.split("/")[0]
-        for port, bindings in ports.items()
-        if port.endswith("/tcp") and any(
-            binding["HostPort"] == str(database.port) for binding in bindings or []
-        )
-    ]
-    if len(matches) != 1:
-        parser.error("cannot map DATABASE_URL port to the cluster node; check tripgoctl environment status")
+    
+    def container_url(value: str) -> str:
+        endpoint = urlsplit(value)
+        if endpoint.hostname not in ("localhost", "127.0.0.1", "::1"):
+            parser.error("this helper expects endpoints from the local tripgoctl environment")
+        matches = [
+            port.split("/")[0]
+            for port, bindings in ports.items()
+            if port.endswith("/tcp") and any(
+                binding["HostPort"] == str(endpoint.port) for binding in bindings or []
+            )
+        ]
+        if len(matches) != 1:
+            parser.error("cannot map endpoint port to the cluster node; check tripgoctl environment status")
+        credentials, separator, _ = endpoint.netloc.rpartition("@")
+        netloc = (credentials + separator if separator else "") + args.node + ":" + matches[0]
+        return urlunsplit(endpoint._replace(netloc=netloc))
 
-    credentials, separator, _ = database.netloc.rpartition("@")
-    netloc = (credentials + separator if separator else "") + args.node + ":" + matches[0]
     env = os.environ.copy()
-    env["DATABASE_URL"] = urlunsplit(database._replace(netloc=netloc))
+    env["DATABASE_URL"] = container_url(os.environ["DATABASE_URL"])
+    env["OTEL_EXPORTER_OTLP_ENDPOINT"] = container_url(os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"])
     env["HTTP_ADDR"] = ":" + http_port
 
     command: list[str] = [

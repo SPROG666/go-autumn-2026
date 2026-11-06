@@ -7,7 +7,7 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY api/ ./api/
 RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" \
-    -o /out/trip-service ./cmd/trip-service
+    -o /out/trip-service ./cmd/service
 
 FROM scratch
 COPY --from=build /out/trip-service /trip-service
