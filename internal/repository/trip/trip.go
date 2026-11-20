@@ -80,7 +80,7 @@ func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (trip.Tri
 		Select(
 			"id", "user_id", "driver_id",
 			"start_latitude", "start_longitude", "end_latitude", "end_longitude",
-			"price", "status", "started_at", "finished_at", "created_at", "updated_at",
+			"price", "status", "started_at", "finished_at", "created_at", "updated_at", "last_position_at",
 		).
 		From("trips").
 		Where(sq.Eq{"id": id})
@@ -97,7 +97,7 @@ func (r *Repository) get(ctx context.Context, id uuid.UUID, lock bool) (trip.Tri
 		&result.ID, &result.UserID, &result.DriverID,
 		&result.StartLatitude, &result.StartLongitude, &result.EndLatitude, &result.EndLongitude,
 		&result.Price, &result.Status, &result.StartedAt, &result.FinishedAt,
-		&result.CreatedAt, &result.UpdatedAt,
+		&result.CreatedAt, &result.UpdatedAt, &result.LastPositionAt,
 	)
 	if err != nil {
 		switch {

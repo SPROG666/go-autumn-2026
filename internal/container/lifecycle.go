@@ -8,43 +8,51 @@ import (
 	"net/http"
 )
 
-func (a *App) Run(ctx context.Context) (runErr error) {
-	defer func() {
-		if a.pool != nil {
-			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.ShutdownTimeout)
-			defer cancel()
-			runErr = errors.Join(runErr, a.Close(cleanup))
-		}
-	}()
+func (a *App) Run(ctx context.Context) error {
 	var listen net.ListenConfig
 	listener, err := listen.Listen(ctx, "tcp", a.Server.Addr)
 	if err != nil {
-		return fmt.Errorf("listen HTTP: %w", err)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.ShutdownTimeout)
+		defer cancel()
+		return errors.Join(fmt.Errorf("listen HTTP: %w", err), a.Close(cleanup))
 	}
+	a.positions.Start(context.WithoutCancel(ctx))
 	serveErrors := make(chan error, 1)
 	go func() { serveErrors <- a.Server.Serve(listener) }()
 	a.Logger.InfoContext(ctx, "service started", "addr", listener.Addr().String())
+	var runErr error
 	select {
 	case err := <-serveErrors:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+		if !errors.Is(err, http.ErrServerClosed) {
+			runErr = fmt.Errorf("serve HTTP: %w", err)
 		}
-		return fmt.Errorf("serve HTTP: %w", err)
 	case <-ctx.Done():
 	}
 	shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.ShutdownTimeout)
 	defer cancel()
 	a.Logger.InfoContext(shutdown, "service stopping")
 	if err := a.Server.Shutdown(shutdown); err != nil {
-		return errors.Join(fmt.Errorf("graceful shutdown: %w", err), a.Server.Close(), a.Close(shutdown))
+		runErr = errors.Join(runErr, fmt.Errorf("graceful shutdown: %w", err), a.Server.Close())
 	}
-	err = a.Close(shutdown)
-	a.Logger.InfoContext(shutdown, "service stopped")
-	return err
+	runErr = errors.Join(runErr, a.Close(shutdown))
+	if shutdown.Err() != nil {
+		a.Logger.ErrorContext(shutdown, "shutdown budget exhausted", "error", shutdown.Err())
+	} else {
+		a.Logger.InfoContext(shutdown, "service stopped")
+	}
+	return runErr
 }
 
 func (a *App) Close(ctx context.Context) error {
 	var closeErr error
+	if a.positions != nil {
+		closeErr = a.positions.Stop(ctx)
+		a.positions = nil
+	}
+	if a.push != nil {
+		a.push.Close()
+		a.push = nil
+	}
 	if a.telemetry != nil {
 		if err := a.telemetry.Shutdown(ctx); err != nil {
 			a.Logger.WarnContext(ctx, "telemetry shutdown incomplete", "error", err)
@@ -59,7 +67,7 @@ func (a *App) Close(ctx context.Context) error {
 		select {
 		case <-closed:
 		case <-ctx.Done():
-			closeErr = fmt.Errorf("shutdown budget exhausted closing PostgreSQL: %w", ctx.Err())
+			closeErr = errors.Join(closeErr, fmt.Errorf("shutdown budget exhausted closing PostgreSQL: %w", ctx.Err()))
 		}
 	}
 	return closeErr

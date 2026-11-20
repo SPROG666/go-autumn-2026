@@ -7,7 +7,7 @@ GOLANGCI_LINT ?= $(shell go env GOPATH)/bin/golangci-lint
 .PHONY: generate run build test test-unit test-integration lint vet migrate migrate-down migrate-status check-database-url docker-build docker-run
 
 docker-build:
-	docker build -t trip-service:lab02 .
+	docker build -t trip-service:lab03 .
 
 docker-run:
 	python3 deploy/run-container.py

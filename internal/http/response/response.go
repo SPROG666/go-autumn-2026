@@ -21,7 +21,7 @@ func (h *Writer) Trip(w http.ResponseWriter, r *http.Request, status int, value 
 		StartPoint: api.Coordinates{Latitude: value.StartLatitude, Longitude: value.StartLongitude},
 		EndPoint:   api.Coordinates{Latitude: value.EndLatitude, Longitude: value.EndLongitude},
 		Price:      value.Price, Status: api.TripStatus(value.Status),
-		StartedAt: value.StartedAt, FinishedAt: value.FinishedAt,
+		StartedAt: value.StartedAt, FinishedAt: value.FinishedAt, LastPositionAt: value.LastPositionAt,
 	}); err != nil {
 		h.logger.ErrorContext(r.Context(), "write trip response", "error", err)
 	}

@@ -72,6 +72,17 @@ func database(t *testing.T) *databaseFixture {
 			t.Fatal(err)
 		}
 		up := strings.SplitN(string(source), "-- +goose Down", 2)[0]
+		if strings.Contains(up, "-- +goose NO TRANSACTION") {
+			for _, statement := range strings.Split(up, ";") {
+				if strings.TrimSpace(statement) == "" {
+					continue
+				}
+				if _, err := pool.Exec(ctx, statement); err != nil {
+					t.Fatal("apply nontransactional migration", file, err)
+				}
+			}
+			continue
+		}
 		if _, err := pool.Exec(ctx, up); err != nil {
 			t.Fatal("apply integration migration", file, err)
 		}

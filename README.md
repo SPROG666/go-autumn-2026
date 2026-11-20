@@ -1,8 +1,12 @@
-# TripGo — лабораторные работы 1 и 2
+# TripGo — лабораторные работы 1–3
 
  - Сервис создаёт, хранит и завершает поездки
  - Данные находятся в PostgreSQL
- - Реализованы ЛР1 с обоими бонусами и основная часть ЛР2
+ - Реализованы:
+    1. ЛР1 с обоими бонусами
+    2. ЛР2
+    3. ЛР3
+ - Сервис принимает координаты и запрашивает пропавшие через Push Service
 
 ## Запускаем сервис
 
@@ -166,7 +170,7 @@ make migrate && make docker-run
 Размер образа после сборки:
 
 ```bash
-docker image inspect trip-service:lab02 --format '{{.Size}} bytes'
+docker image inspect trip-service:lab03 --format '{{.Size}} bytes'
 ```
 
 [run-container.py](deploy/run-container.py) подключает контейнер к PostgreSQL
@@ -305,8 +309,60 @@ Middleware: **Recover → Tracing → Logging → Metrics**. Логи — JSON �
 
 | Скриншот | Что сделали | Что видим |
 |---|---|---|
-| [Jaeger](assets/jaeger.png) | Создали поездку через `POST /api/v1/trips` | HTTP-спан со статусом `201` и вложенные `BEGIN`, два `INSERT`, `COMMIT`. Запрос занял 16,4 мс; у выбранного INSERT видны `db.collection.name=trips` и `db.operation.name=INSERT`. |
-| [Созданные поездки](assets/grafana-created.png) | Проверили `tripgo_trips_created_total` в Grafana | Счётчик равен 1: создана одна поездка. |
-| [Длительность запросов](assets/grafana-duration.png) | Выполнили серию GET-запросов и рассчитали p95 по гистограмме за последние 5 минут | На графике p95 около 9–9,6 мс; в легенде — шаблон `/api/v1/trips/{tripId}` без UUID. |
+| [Jaeger](assets/lab02-jaeger.png) | Создали поездку через `POST /api/v1/trips` | HTTP-спан со статусом `201` и вложенные `BEGIN`, два `INSERT`, `COMMIT`. Запрос занял 16,4 мс; у выбранного INSERT видны `db.collection.name=trips` и `db.operation.name=INSERT`. |
+| [Созданные поездки](assets/lab02-grafana-created.png) | Проверили `tripgo_trips_created_total` в Grafana | Счётчик равен 1: создана одна поездка. |
+| [Длительность запросов](assets/lab02-grafana-duration.png) | Выполнили серию GET-запросов и рассчитали p95 по гистограмме за последние 5 минут | На графике p95 около 9–9,6 мс; в легенде — шаблон `/api/v1/trips/{tripId}` без UUID. |
 
 `NaN` для POST-маршрута на графике p95 допустим, если в выбранном пятиминутном окне не было POST-запросов.
+
+
+## Координаты и маршрут — ЛР3
+
+Окружение ЛР3 включает Push Service; для его сборки нужен Docker Buildx.
+После перехода с ЛР2 обновляем `.env` и примением миграции:
+
+```sh
+tripgoctl environment start
+tripgoctl connect
+make migrate
+```
+
+- `POST /api/v1/trips/{tripId}/positions` — сохранить координату активной поездки.
+- `GET /api/v1/trips/{tripId}/positions` — маршрут по `recorded_at`, затем `id`.
+
+Формат — в [OpenAPI](contracts/openapi/trip-service.openapi.yaml).
+Точка и `last_position_at` сохраняются в одной транзакции; `GREATEST` в SQL
+не даёт запоздавшей точке уменьшить время последней координаты.
+
+## Опрос устаревших поездок
+
+```mermaid
+flowchart LR
+    Scanner[Сканер] --> Queue[Очередь] --> Workers[Воркеры] --> Push[Push Service]
+```
+
+Сканер одним SQL выбирает активные поездки без свежих координат, начиная с самых старых.
+Если точек нет, время отсчитывается от `started_at`. Под выборку создан частичный индекс `CONCURRENTLY`.
+Воркеры через HTTP-гейтвей отправляют водителю `REQUEST_POSITION` с `trip_id` поездки.
+
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `POSITION_CHECK_INTERVAL` | `30s` | Период проверки и повторного опроса |
+| `POSITION_STALE_AFTER` | `60s` | Порог отсутствия свежих координат |
+| `POSITION_WORKERS` | `4` | Число воркеров |
+| `POSITION_QUEUE_SIZE` | `100` | Ёмкость очереди |
+| `PUSH_HTTP_URL` | Из `.env` | Адрес Push Service |
+| `PUSH_REQUEST_TIMEOUT` | `1s` | Таймаут запроса координат |
+| `SHUTDOWN_TIMEOUT` | `10s` | Общий бюджет остановки |
+
+Очередь — буферизованный канал, дедупликация — map под мьютексом.
+Сохранённая координата отменяет ожидающий запрос. При переполнении задача отбрасывается
+без блокировки сканера: лог `Warn`, метрики `tripgo.stale_checks` и `tripgo.position_requests`
+с `result=dropped`. Повтор — на следующем тике; ретраев внутри задачи нет.
+
+Остановка: HTTP → сканер → доработка очереди → клиенты и БД, в пределах `SHUTDOWN_TIMEOUT`.
+
+`make test` проверяет атомарность, индекс (`EXPLAIN ANALYZE`), дедупликацию, отмену,
+переполнение, ошибки и остановку с `-race` и `goleak`. Штатные `tripgoctl` и Docker-запуск проверены.
+[Скриншот метрик пула](assets/lab03-pool-results.png): 200 поездок, 4 воркера, очередь 10,
+задержка локальной HTTP-заглушки 5 с, таймаут 400 мс. Скриншот приложить к описанию PR.
