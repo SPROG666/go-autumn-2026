@@ -8,6 +8,8 @@ output-options:
     - createTrip
     - getTrip
     - finishTrip
+    - createTripPosition
+    - listTripPositions
     - health
     - ready
 output: api/api.gen.go

@@ -12,8 +12,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/SPROG666/go-autumn-2026/internal/config"
+	"github.com/SPROG666/go-autumn-2026/internal/gateway/push"
 	httptransport "github.com/SPROG666/go-autumn-2026/internal/http"
 	"github.com/SPROG666/go-autumn-2026/internal/http/middleware"
+	positionlist "github.com/SPROG666/go-autumn-2026/internal/http/position/list"
+	positionsave "github.com/SPROG666/go-autumn-2026/internal/http/position/save"
 	"github.com/SPROG666/go-autumn-2026/internal/http/response"
 	createhandler "github.com/SPROG666/go-autumn-2026/internal/http/trip/create"
 	finishhandler "github.com/SPROG666/go-autumn-2026/internal/http/trip/finish"
@@ -22,10 +25,14 @@ import (
 	"github.com/SPROG666/go-autumn-2026/internal/infra/postgres/transaction"
 	"github.com/SPROG666/go-autumn-2026/internal/infra/runtime"
 	"github.com/SPROG666/go-autumn-2026/internal/infra/telemetry"
+	positionrepo "github.com/SPROG666/go-autumn-2026/internal/repository/position"
 	"github.com/SPROG666/go-autumn-2026/internal/repository/trip"
+	listpositions "github.com/SPROG666/go-autumn-2026/internal/usecase/position/list"
+	saveposition "github.com/SPROG666/go-autumn-2026/internal/usecase/position/save"
 	"github.com/SPROG666/go-autumn-2026/internal/usecase/trip/create"
 	"github.com/SPROG666/go-autumn-2026/internal/usecase/trip/finish"
 	"github.com/SPROG666/go-autumn-2026/internal/usecase/trip/get"
+	"github.com/SPROG666/go-autumn-2026/internal/worker/positions"
 )
 
 type App struct {
@@ -33,6 +40,8 @@ type App struct {
 	Logger    *slog.Logger
 	pool      *pgxpool.Pool
 	telemetry *telemetry.Providers
+	positions *positions.Pool
+	push      *push.Gateway
 	cfg       config.Config
 }
 
@@ -83,8 +92,23 @@ func New(ctx context.Context, cfg config.Config) (_ *App, err error) {
 	createTrip := create.New(repo, history, tx, keys, runtime.Clock{}, runtime.IDs{}, observer)
 	getTrip := get.New(repo)
 	finishTrip := finish.New(repo, history, tx, runtime.Clock{}, observer)
+	positionObserver, err := telemetry.NewPositionObserver(meter)
+	if err != nil {
+		return nil, err
+	}
+	app.push, err = push.New(cfg.PushHTTPURL, cfg.PushRequestTimeout, providers.Traces)
+	if err != nil {
+		return nil, err
+	}
+	app.positions = positions.New(positions.Config{
+		Workers: cfg.PositionWorkers, QueueSize: cfg.PositionQueueSize,
+		StaleAfter: cfg.PositionStaleAfter, RequestTimeout: cfg.PushRequestTimeout,
+	}, repo, app.push, runtime.NewTicker(cfg.PositionCheckInterval), positionObserver, logger, providers.Traces.Tracer("trip-service/positions"))
+	positionRepo := positionrepo.New(app.pool, cfg.DatabaseQueryTimeout)
+	savePosition := saveposition.New(repo, positionRepo, tx, runtime.Clock{}, positionObserver)
+	listPositions := listpositions.New(repo, positionRepo)
 	writer := response.New(logger)
-	handler := httptransport.NewHandler(createhandler.New(createTrip, writer), gethandler.New(getTrip, writer), finishhandler.New(finishTrip, writer), app.pool, cfg.DatabaseQueryTimeout, writer, logger)
+	handler := httptransport.NewHandler(createhandler.New(createTrip, writer), gethandler.New(getTrip, writer), finishhandler.New(finishTrip, writer), app.pool, cfg.DatabaseQueryTimeout, writer, logger).WithPositions(positionsave.New(savePosition, app.positions, writer), positionlist.New(listPositions, writer))
 	router, err := httptransport.NewRouter(logger, handler, writer)
 	if err != nil {
 		return nil, err

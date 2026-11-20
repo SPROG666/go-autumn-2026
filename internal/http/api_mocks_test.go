@@ -53,6 +53,18 @@ func (mr *MockServerInterfaceMockRecorder) CreateTrip(w, r, params any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTrip", reflect.TypeOf((*MockServerInterface)(nil).CreateTrip), w, r, params)
 }
 
+// CreateTripPosition mocks base method.
+func (m *MockServerInterface) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "CreateTripPosition", w, r, tripId)
+}
+
+// CreateTripPosition indicates an expected call of CreateTripPosition.
+func (mr *MockServerInterfaceMockRecorder) CreateTripPosition(w, r, tripId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTripPosition", reflect.TypeOf((*MockServerInterface)(nil).CreateTripPosition), w, r, tripId)
+}
+
 // FinishTrip mocks base method.
 func (m *MockServerInterface) FinishTrip(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
 	m.ctrl.T.Helper()
@@ -87,6 +99,18 @@ func (m *MockServerInterface) Health(w http.ResponseWriter, r *http.Request) {
 func (mr *MockServerInterfaceMockRecorder) Health(w, r any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Health", reflect.TypeOf((*MockServerInterface)(nil).Health), w, r)
+}
+
+// ListTripPositions mocks base method.
+func (m *MockServerInterface) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ListTripPositions", w, r, tripId)
+}
+
+// ListTripPositions indicates an expected call of ListTripPositions.
+func (mr *MockServerInterfaceMockRecorder) ListTripPositions(w, r, tripId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTripPositions", reflect.TypeOf((*MockServerInterface)(nil).ListTripPositions), w, r, tripId)
 }
 
 // Ready mocks base method.

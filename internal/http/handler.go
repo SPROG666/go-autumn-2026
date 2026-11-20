@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/SPROG666/go-autumn-2026/api"
+	positionlist "github.com/SPROG666/go-autumn-2026/internal/http/position/list"
+	positionsave "github.com/SPROG666/go-autumn-2026/internal/http/position/save"
 	"github.com/SPROG666/go-autumn-2026/internal/http/response"
 	"github.com/SPROG666/go-autumn-2026/internal/http/trip/create"
 	"github.com/SPROG666/go-autumn-2026/internal/http/trip/finish"
@@ -14,6 +16,8 @@ import (
 )
 
 type Handler struct {
+	savePosition *positionsave.Handler
+	getPositions *positionlist.Handler
 	create       *create.Handler
 	get          *get.Handler
 	finish       *finish.Handler

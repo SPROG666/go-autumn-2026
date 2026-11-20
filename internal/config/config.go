@@ -34,6 +34,12 @@ type Config struct {
 	OTelResourceAttributes  string        `env:"OTEL_RESOURCE_ATTRIBUTES" env-required:"true" validate:"notblank"`
 	OTelSampler             string        `env:"OTEL_TRACES_SAMPLER" env-required:"true" validate:"oneof=always_on always_off parentbased_always_on parentbased_always_off traceidratio parentbased_traceidratio"`
 	OTelSamplerArg          float64       `env:"OTEL_TRACES_SAMPLER_ARG" env-default:"1" validate:"gte=0,lte=1"`
+	PositionCheckInterval   time.Duration `env:"POSITION_CHECK_INTERVAL" env-default:"30s" validate:"gt=0"`
+	PositionStaleAfter      time.Duration `env:"POSITION_STALE_AFTER" env-default:"60s" validate:"gt=0"`
+	PositionWorkers         int           `env:"POSITION_WORKERS" env-default:"4" validate:"gte=1"`
+	PositionQueueSize       int           `env:"POSITION_QUEUE_SIZE" env-default:"100" validate:"gte=1"`
+	PushHTTPURL             string        `env:"PUSH_HTTP_URL" env-required:"true" validate:"http_url"`
+	PushRequestTimeout      time.Duration `env:"PUSH_REQUEST_TIMEOUT" env-default:"1s" validate:"gt=0"`
 	ServiceVersion          string        `env:"SERVICE_VERSION" env-default:"dev" validate:"notblank"`
 }
 

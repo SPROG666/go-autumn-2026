@@ -10,5 +10,9 @@ func normalize(value trip.Trip) trip.Trip {
 		at := value.FinishedAt.UTC()
 		value.FinishedAt = &at
 	}
+	if value.LastPositionAt != nil {
+		at := value.LastPositionAt.UTC()
+		value.LastPositionAt = &at
+	}
 	return value
 }

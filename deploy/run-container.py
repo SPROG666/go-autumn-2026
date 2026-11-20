@@ -17,10 +17,10 @@ class Arguments(argparse.Namespace):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--image", default="trip-service:lab02")
+    parser.add_argument("--image", default="trip-service:lab03")
     parser.add_argument("--node", default="tripgo-local-control-plane")
     parser.add_argument("--network", default="kind")
-    parser.add_argument("--name", default="trip-service-lab02")
+    parser.add_argument("--name", default="trip-service-lab03")
     args = parser.parse_args(namespace=Arguments())
 
     required = (
@@ -31,6 +31,8 @@ def main() -> None:
         "DATABASE_URL", "DATABASE_MAX_CONNS", "DATABASE_MIN_CONNS",
         "DATABASE_MAX_CONN_LIFETIME", "DATABASE_CONNECT_TIMEOUT", "DATABASE_QUERY_TIMEOUT",
         "IDEMPOTENCY_TTL",
+        "POSITION_CHECK_INTERVAL", "POSITION_STALE_AFTER",
+        "POSITION_WORKERS", "POSITION_QUEUE_SIZE", "PUSH_HTTP_URL", "PUSH_REQUEST_TIMEOUT",
         "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT",
         "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_RESOURCE_ATTRIBUTES",
         "OTEL_TRACES_SAMPLER", "OTEL_TRACES_SAMPLER_ARG", "SERVICE_VERSION",
@@ -77,6 +79,7 @@ def main() -> None:
     env = os.environ.copy()
     env["DATABASE_URL"] = container_url(os.environ["DATABASE_URL"])
     env["OTEL_EXPORTER_OTLP_ENDPOINT"] = container_url(os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"])
+    env["PUSH_HTTP_URL"] = container_url(os.environ["PUSH_HTTP_URL"])
     env["HTTP_ADDR"] = ":" + http_port
 
     command: list[str] = [
